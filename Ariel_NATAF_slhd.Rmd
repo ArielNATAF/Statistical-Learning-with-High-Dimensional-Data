@@ -1,0 +1,145 @@
+---
+title: "Statistical Learning with High-Dimensional Data"
+author: "Ariel Nataf"
+subtitle: DSTI A20 Cohort
+output:
+  html_document:
+    df_print: paged
+---
+
+For some unknown reason to me the plot function doesn't show me the clusters colors.
+I have to knit the document to see the colored result it took me a lot of time to figure this way to avoid the problem
+
+#Exercise 3
+
+## 3,1 Loading the Data
+```{r}
+load("/Users/arielnataf/Desktop/DSTI/SLHD/Velib.Rdata")
+```
+## 3.2 Pretreatment et descriptive analysis
+
+We look at the documentation first
+```{r}
+?velibCount
+```
+
+We find very informative metadata:
+> The format is:
+> - data: the nb of available bikes of the 1189 stations at 181 time points.
+> - position: the longitude and latitude of the 1189 bike stations.
+> - dates: the download dates.
+> - bonus: indicates if the station is on a hill (bonus = 1).
+> - names: the names of the stations.
+
+We also look for any missing data
+```{r}
+is.na(Velib)
+```
+
+There isn't any.
+
+```{r}
+# We keep only the mean number of velib at each station
+Velib_mean <- rowMeans(Velib$data)
+data = cbind(Velib$position, Velib_mean)
+data = cbind(Velib$bonus, data)
+
+data
+```
+
+
+# 3.3 Data visualization
+```{r}
+X = data
+?princomp
+# The usual manner to do PCA in R
+pca = princomp(X)
+biplot(pca,col=c("red","blue"))
+?biplot
+```
+Looking at the PCA, 
+• we can see that longitude and latitude arrows stay in the middle little influence
+• Velib$bonus (on a hill) goes to the right
+• The mean number of available velibs goes to the left
+
+Velib$bonus and velib at date are opposite. We can guess a hill has an impact on the usage of a velib
+
+
+## 3.4 Clustering
+
+### 3.4.1 Hierarchical clustering
+```{r}
+D = dist(data)
+par(mfrow=c(2,2))
+hc1 = hclust(D,method = "complete"); plot(hc1)
+hc2 = hclust(D,method = "single"); plot(hc2)
+hc3 = hclust(D,method = "centroid"); plot(hc3)
+hc4 = hclust(D,method = "ward.D2"); plot(hc4)
+```
+Complete seems to be the best method looking at the dendograms
+
+```{r, results='hide', message=FALSE}
+hc1 = hclust(D,method = "complete")
+cl1 = cutree(hc4,k = 2)
+cl1
+```
+
+We looks at clusters with all variables
+```{r}
+plot(data,col=cl1,pch=19)
+```
+clusters depending of hill and the mean numbers are clearly there
+
+Looking at the clusters on a pretty map:
+```{r}
+#install.packages("leaflet")
+library(leaflet)
+
+palette = colorFactor("RdYlBu", domain = NULL)
+leaflet(X) %>% addTiles() %>%
+    addCircleMarkers(radius = 3,
+                     color = palette(cl1),
+                     stroke = FALSE, fillOpacity = 0.9)
+```
+very pretty, I can see my home
+
+On the map we can guess the second cluster is the hills.
+
+### 3.4.2 k-means
+
+```{r}
+#install.packages("mclust")
+library(mclust)
+```
+
+```{r}
+out = Mclust(data[c("Velib_mean", "Velib$bonus")],G=1:10,modelNames = "EII")
+plot(out, what = 'BIC')
+```
+
+We only use 2 clusters
+```{r}
+out2 = kmeans(data, centers = 2, nstart = 10)
+plot(data,col=out2$cluster,pch=19)
+```
+
+
+```{r}
+plot(data[,c(1,4)],col=out2$cluster,pch=19)
+```
+
+Comparison with kmeans and hclust on mean number of velib on a station and hills
+```{r}
+par(mfrow = c(1,2))
+D = dist(data)
+hc = hclust(D,method = "complete"); out.hc = cutree(hc,2)
+plot(data[,c(1,4)],col=out.hc,pch=19,cex = 3,main='HC')
+out.km = kmeans(data, centers = 2, nstart = 10)
+plot(data[,c(1,4)],col=out.km$cluster,pch=19,cex = 3,main='kmeans')
+```
+it looks similar 
+
+
+## 3.5 Summary
+People don't use as much velibs on top of a hill than down.
+Otherwise west/north/west/east don't impact very much.
